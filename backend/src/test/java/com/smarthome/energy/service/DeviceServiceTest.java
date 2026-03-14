@@ -50,6 +50,8 @@ class DeviceServiceTest {
     private EnergyUsageLogRepository energyUsageLogRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private DatasetImportService datasetImportService;
 
     @InjectMocks
     private DeviceService deviceService;

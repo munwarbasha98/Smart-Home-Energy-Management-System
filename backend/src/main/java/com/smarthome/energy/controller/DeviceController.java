@@ -100,6 +100,16 @@ public class DeviceController {
     }
 
     /**
+     * PUT /api/devices/{id}/toggle
+     * Alias for PATCH toggle — ensures broad client compatibility.
+     */
+    @PutMapping("/{deviceId}/toggle")
+    @PreAuthorize("hasRole('HOMEOWNER') or hasRole('ADMIN')")
+    public ResponseEntity<?> toggleDevicePut(@PathVariable Long deviceId) {
+        return ResponseEntity.ok(deviceService.toggleDevice(deviceId));
+    }
+
+    /**
      * GET /api/devices/total-power
      * Returns sum of powerRating (kW) for all currently ON devices.
      * All authenticated roles can access.

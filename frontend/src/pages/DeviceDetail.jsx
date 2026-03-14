@@ -105,11 +105,10 @@ const DeviceDetail = () => {
 
     const handleToggle = async () => {
         if (!device) return;
-        const action = device.isOnline ? 'off' : 'on';
         try {
             setToggling(true);
-            await deviceApi.controlDevice(device.id, action);
-            setDevice(prev => ({ ...prev, isOnline: action === 'on' }));
+            const res = await deviceApi.toggleDevice(device.id);
+            setDevice(res.data);
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to toggle device');
         } finally {

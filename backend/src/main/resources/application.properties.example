@@ -1,7 +1,7 @@
 spring.application.name=energy
 
 # ── Database Configuration (MySQL) ───────────────────
-spring.datasource.url=jdbc:mysql://localhost:3306/smart_database?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+spring.datasource.url=jdbc:mysql://localhost:3306/smart_database_new?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
 spring.datasource.driverClassName=com.mysql.cj.jdbc.Driver
 spring.datasource.username=root
 spring.datasource.password=YOUR_MYSQL_PASSWORD

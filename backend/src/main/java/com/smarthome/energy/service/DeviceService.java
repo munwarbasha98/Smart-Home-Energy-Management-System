@@ -37,6 +37,9 @@ public class DeviceService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private DatasetImportService datasetImportService;
+
     @Value("${smarthome.app.energyRatePerKwh:8.0}")
     private double energyRatePerKwh;
 
@@ -141,7 +144,17 @@ public class DeviceService {
                 request.getPowerRating());
         device.setDescription(request.getDescription());
 
+        // Start device as ON/online so the IoT simulator picks it up immediately
+        device.setStatus(DeviceStatus.ON);
+        device.setOnline(true);
+        device.setTurnedOnAt(LocalDateTime.now());
+        device.setLastActive(LocalDateTime.now());
+
         Device savedDevice = deviceRepository.save(device);
+
+        // Import dataset-backed energy readings for past hours of today
+        datasetImportService.importForDevice(savedDevice);
+
         return convertToDeviceResponse(savedDevice);
     }
 

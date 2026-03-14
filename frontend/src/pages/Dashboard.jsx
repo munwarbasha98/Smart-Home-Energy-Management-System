@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { deviceApi } from '../services/api';
 import AddDeviceModal from '../components/AddDeviceModal';
 import SummaryCard from '../components/SummaryCard';
+import { HourlyUsageChart, DailyUsageChart, LiveUsageBanner } from '../components/EnergyCharts';
 import {
     Zap, DollarSign, TrendingUp, Activity, Wind, Lightbulb,
     Shield, Smartphone, Battery, Sun, Leaf, Clock, Flame,
@@ -12,25 +13,10 @@ import {
     Lock, Droplet, Edit2, Trash2, ToggleLeft, ToggleRight, Cpu
 } from 'lucide-react';
 import {
-    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    BarChart as RechartsBarChart, Bar, PieChart as RechartsPieChart, Pie, Cell
+    ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Tooltip
 } from 'recharts';
 
-// ── Static chart data ──────────────────────────────────────────────────────────
-const mockUsageData = [
-    { time: '00:00', usage: 1.2, solar: 0 },
-    { time: '04:00', usage: 0.8, solar: 0 },
-    { time: '08:00', usage: 2.5, solar: 1.5 },
-    { time: '12:00', usage: 3.2, solar: 4.8 },
-    { time: '16:00', usage: 2.8, solar: 3.5 },
-    { time: '20:00', usage: 3.8, solar: 0.5 },
-    { time: '23:59', usage: 1.5, solar: 0 },
-];
-const mockSolarData = [
-    { day: 'Mon', output: 14 }, { day: 'Tue', output: 18 },
-    { day: 'Wed', output: 12 }, { day: 'Thu', output: 20 },
-    { day: 'Fri', output: 16 }, { day: 'Sat', output: 22 }, { day: 'Sun', output: 19 },
-];
+// (Static mock data removed — replaced with live API-driven charts)
 const mockDeviceData = [
     { name: 'HVAC', value: 45, color: '#10b981' },
     { name: 'Lights', value: 15, color: '#f59e0b' },
@@ -81,21 +67,6 @@ const CircularProgress = ({ value, size = 120, strokeWidth = 10 }) => {
                 </linearGradient>
             </defs>
         </svg>
-    );
-};
-
-const CustomTooltip = ({ active, payload, label }) => {
-    if (!active || !payload?.length) return null;
-    return (
-        <div className="px-4 py-3 rounded-xl border text-sm"
-            style={{ background: 'var(--card-bg)', borderColor: 'var(--accent-glow)', backdropFilter: 'blur(12px)' }}>
-            <p className="font-bold mb-1 text-xs uppercase tracking-wider" style={{ color: '#10B981' }}>{label}</p>
-            {payload.map((p, i) => (
-                <p key={i} className="font-semibold" style={{ color: p.color }}>
-                    {p.name}: {p.value} {p.name === 'usage' ? 'kWh' : 'kW'}
-                </p>
-            ))}
-        </div>
     );
 };
 
@@ -171,12 +142,11 @@ const Dashboard = () => {
     };
 
     const handleToggle = async (device) => {
-        const action = device.isOnline ? 'off' : 'on';
         try {
             setTogglingId(device.id);
-            await deviceApi.controlDevice(device.id, action);
+            const res = await deviceApi.toggleDevice(device.id);
             setDevices(prev => prev.map(d =>
-                d.id === device.id ? { ...d, isOnline: action === 'on' } : d
+                d.id === device.id ? res.data : d
             ));
         } catch (err) {
             setDeviceError(err.response?.data?.message || 'Failed to toggle device');
@@ -290,6 +260,9 @@ const Dashboard = () => {
                     )}
                 </AnimatePresence>
 
+                {/* ── Live Usage Banner (auto-refreshes every 10s) ── */}
+                <LiveUsageBanner autoRefreshMs={10000} />
+
                 {/* ── Summary Cards ── */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                     {summaryCards.map((card, i) => (
@@ -301,68 +274,15 @@ const Dashboard = () => {
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
                     {/* Charts column */}
                     <div className="xl:col-span-8 space-y-6">
-                        {/* Energy Usage Area Chart */}
+                        {/* Hourly Energy Usage Chart (live — auto-refreshes every 30s) */}
                         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-                            <GlassCard className="p-6">
-                                <div className="flex items-center justify-between mb-6">
-                                    <div>
-                                        <h2 className="text-lg font-black flex items-center gap-2" style={{ color: 'var(--text-color)' }}>
-                                            <TrendingUp size={18} style={{ color: '#10B981' }} /> Energy Usage
-                                        </h2>
-                                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>Real-time consumption vs Solar generation</p>
-                                    </div>
-                                    <div className="flex items-center gap-4 text-xs font-semibold">
-                                        <div className="flex items-center gap-1.5"><div className="w-3 h-1 rounded-full bg-blue-400" /><span style={{ color: 'var(--text-secondary)' }}>Usage</span></div>
-                                        <div className="flex items-center gap-1.5"><div className="w-3 h-1 rounded-full" style={{ background: '#10B981' }} /><span style={{ color: 'var(--text-secondary)' }}>Solar</span></div>
-                                    </div>
-                                </div>
-                                <div className="h-[240px]">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={mockUsageData}>
-                                            <defs>
-                                                <linearGradient id="colorUsage" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#60A5FA" stopOpacity={0.3} /><stop offset="95%" stopColor="#60A5FA" stopOpacity={0} />
-                                                </linearGradient>
-                                                <linearGradient id="colorSolar" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-color)" opacity={0.3} />
-                                            <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
-                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
-                                            <Tooltip content={<CustomTooltip />} />
-                                            <Area type="monotone" dataKey="usage" stroke="#60A5FA" strokeWidth={2.5} fillOpacity={1} fill="url(#colorUsage)" />
-                                            <Area type="monotone" dataKey="solar" stroke="#10B981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorSolar)" />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </GlassCard>
+                            <HourlyUsageChart autoRefreshMs={30000} />
                         </motion.div>
 
                         {/* Bar + Pie Row */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}>
-                                <GlassCard className="p-6 h-full">
-                                    <h3 className="text-base font-black mb-5 flex items-center gap-2" style={{ color: 'var(--text-color)' }}>
-                                        <Sun size={16} style={{ color: '#F59E0B' }} /> Weekly Solar Output
-                                    </h3>
-                                    <div className="h-[180px]">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <RechartsBarChart data={mockSolarData}>
-                                                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
-                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
-                                                <Tooltip cursor={{ fill: 'var(--navbar-border)', opacity: 0.2 }}
-                                                    contentStyle={{ backgroundColor: 'var(--card-bg)', borderRadius: '12px', border: '1px solid var(--accent-glow)', color: 'var(--text-color)' }} />
-                                                <Bar dataKey="output" fill="url(#barGrad)" radius={[6, 6, 0, 0]} barSize={22} />
-                                                <defs>
-                                                    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="0%" stopColor="#F59E0B" /><stop offset="100%" stopColor="#F97316" stopOpacity={0.6} />
-                                                    </linearGradient>
-                                                </defs>
-                                            </RechartsBarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </GlassCard>
+                                <DailyUsageChart autoRefreshMs={30000} />
                             </motion.div>
 
                             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}>

@@ -143,6 +143,24 @@ export const deviceApi = {
     getTotalPower: () => api.get('/devices/total-power'),
 };
 
+// IoT live reading services
+export const iotApi = {
+    getLiveReading: (deviceId) => api.get(`/iot/devices/${deviceId}/live`),
+};
+
+// Analytics services
+export const analyticsApi = {
+    getTotalLiveUsage: () => api.get('/analytics/total-live-usage'),
+    getHourlyUsage: (date) => api.get('/analytics/hourly', { params: { date } }),
+    getDailyUsage: (month) => api.get('/analytics/daily', { params: { month } }),
+    getWeeklyUsage: (year) => api.get('/analytics/weekly', { params: { year } }),
+    getMonthlyUsage: (year) => api.get('/analytics/monthly', { params: { year } }),
+    getYearlyUsage: () => api.get('/analytics/yearly'),
+    getSummaryAnalytics: (period) => api.get('/analytics/summary', { params: { period } }),
+    getAdminGlobalAnalytics: (period) => api.get('/analytics/admin/global', { params: { period } }),
+    getTechnicianDeviceHealth: () => api.get('/analytics/technician/device-health'),
+};
+
 // Usage Log services (Milestone 2 — /api/usage/* routes)
 export const usageApi = {
     addLog: (deviceId, data) => api.post(`/usage/${deviceId}`, data),
