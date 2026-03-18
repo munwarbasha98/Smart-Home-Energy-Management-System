@@ -1,13 +1,18 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Zap, Menu, X, LogOut, User, Sun, Moon, ChevronRight, Settings, Wrench, Home, BarChart2, Crown } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Zap, Menu, X, LogOut, User, Sun, Moon, ChevronRight, Settings, Wrench, Home, BarChart2, Crown, Clock, Bell, CheckCircle, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { alertApi } from '../services/api';
 
 const Navbar = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
+    const [alerts, setAlerts] = useState([]);
+    const [unreadAlerts, setUnreadAlerts] = useState(0);
+    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    const notificationRef = useRef(null);
     const { theme, toggleTheme } = useTheme();
     const location = useLocation();
     const navigate = useNavigate();
@@ -26,6 +31,40 @@ const Navbar = () => {
         setIsOpen(false);
     }, [location.pathname]);
 
+    // Poll for alerts every 30 s
+    const fetchAlertCount = useCallback(async () => {
+        if (!isAuthenticated) return;
+        try {
+            const res = await alertApi.getAlerts();
+            setUnreadAlerts(res.data?.unreadCount ?? 0);
+            setAlerts(res.data?.alerts || []);
+        } catch { /* silent */ }
+    }, [isAuthenticated]);
+
+    useEffect(() => {
+        fetchAlertCount();
+        const id = setInterval(fetchAlertCount, 30000);
+        return () => clearInterval(id);
+    }, [fetchAlertCount]);
+
+    // Close notifications when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+                setIsNotificationsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleMarkAllRead = async () => {
+        try {
+            await alertApi.markAllRead();
+            fetchAlertCount();
+        } catch { /* silent */ }
+    };
+
     const handleLogout = () => {
         logout();
         navigate('/');
@@ -42,6 +81,7 @@ const Navbar = () => {
         { path: '/dashboard', label: 'Dashboard', icon: Home, roles: null },
         { path: '/admin', label: 'Admin', icon: Crown, roles: ['ROLE_ADMIN'] },
         { path: '/devices', label: 'Devices', icon: Settings, roles: ['ROLE_HOMEOWNER', 'ROLE_ADMIN'] },
+        { path: '/automation', label: 'Automation', icon: Clock, roles: ['ROLE_HOMEOWNER', 'ROLE_ADMIN'] },
         { path: '/technician', label: 'Technician', icon: Wrench, roles: ['ROLE_TECHNICIAN', 'ROLE_ADMIN'] },
     ];
 
@@ -129,7 +169,7 @@ const Navbar = () => {
                         {/* Desktop Right */}
                         <div className="hidden md:flex items-center gap-3">
                             {/* Theme Toggle */}
-                            <motion.button
+                             <motion.button
                                 onClick={toggleTheme}
                                 className="p-2 rounded-lg transition-all"
                                 style={{
@@ -146,6 +186,80 @@ const Navbar = () => {
                                     </motion.div>
                                 </AnimatePresence>
                             </motion.button>
+
+                            {/* Alert Bell Dropdown */}
+                            {isAuthenticated && (
+                                <div className="relative" ref={notificationRef}>
+                                    <button 
+                                        onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                                        className="relative p-2 rounded-lg transition-all z-20"
+                                        style={{ background: isNotificationsOpen ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.08)', color: '#10B981', border: 'none', cursor: 'pointer' }}
+                                        title="Energy Alerts">
+                                        <Bell className="h-4 w-4" />
+                                        {unreadAlerts > 0 && (
+                                            <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full text-white text-xs font-black flex items-center justify-center"
+                                                style={{ background: '#EF4444', fontSize: '9px' }}>
+                                                {unreadAlerts > 9 ? '9+' : unreadAlerts}
+                                            </span>
+                                        )}
+                                    </button>
+
+                                    <AnimatePresence>
+                                        {isNotificationsOpen && (
+                                            <motion.div 
+                                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="absolute right-0 mt-2 w-80 rounded-2xl shadow-2xl border overflow-hidden z-[100]"
+                                                style={{ background: 'var(--card-bg)', borderColor: 'var(--border-color)', backdropFilter: 'blur(16px)' }}
+                                            >
+                                                <div className="flex justify-between items-center p-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
+                                                    <h3 className="font-bold text-sm" style={{ color: 'var(--text-color)' }}>Notifications</h3>
+                                                    {unreadAlerts > 0 && (
+                                                        <button onClick={handleMarkAllRead} className="text-xs font-semibold hover:underline" style={{ color: '#10B981', cursor: 'pointer', background: 'none', border: 'none' }}>
+                                                            Mark all as read
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="max-h-80 overflow-y-auto">
+                                                    {alerts.length === 0 ? (
+                                                        <div className="p-6 text-center text-sm" style={{ color: 'var(--text-secondary)' }}>
+                                                            No notifications right now.
+                                                        </div>
+                                                    ) : (
+                                                        alerts.map((alert) => (
+                                                            <div key={alert.id} className="p-4 border-b hover:bg-black/5 dark:hover:bg-white/5 transition-colors" style={{ borderColor: 'var(--border-color)', background: alert.read ? 'transparent' : 'rgba(239, 68, 68, 0.04)' }}>
+                                                                <div className="flex gap-3 items-start">
+                                                                    <div className={`mt-0.5 p-1.5 rounded-full ${alert.type === 'OVERLOAD' ? 'bg-red-100 text-red-500' : 'bg-green-100 text-green-500'}`}>
+                                                                        {alert.type === 'OVERLOAD' ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-xs font-bold mb-1" style={{ color: 'var(--text-color)' }}>
+                                                                            {alert.type === 'OVERLOAD' ? 'Energy Overload Detected' : 'System Update'}
+                                                                        </p>
+                                                                        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                                                                            {alert.message}
+                                                                        </p>
+                                                                        <p className="text-[10px] mt-2 font-medium" style={{ color: 'var(--text-secondary)' }}>
+                                                                            {new Date(alert.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                                <div className="p-3 border-t text-center" style={{ borderColor: 'var(--border-color)', background: 'rgba(0,0,0,0.02)' }}>
+                                                    <Link to="/dashboard" onClick={() => setIsNotificationsOpen(false)} className="text-xs font-bold hover:underline" style={{ color: '#10B981' }}>
+                                                        Go to Dashboard
+                                                    </Link>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            )}
 
                             {isAuthenticated ? (
                                 <div className="flex items-center gap-2 pl-3 border-l" style={{ borderColor: 'var(--navbar-border)' }}>

@@ -15,6 +15,7 @@ import DeviceManager from './pages/DeviceManager';
 import DeviceDetail from './pages/DeviceDetail';
 import TechnicianTracker from './pages/TechnicianTracker';
 import Analytics from './pages/Analytics';
+import Automation from './pages/Automation';
 import Unauthorized from './pages/Unauthorized';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -92,6 +93,16 @@ function AnimatedRoutes() {
             <PageTransition>
               <ProtectedRoute allowedRoles={['ROLE_HOMEOWNER', 'ROLE_ADMIN']}>
                 <Analytics />
+              </ProtectedRoute>
+            </PageTransition>
+          }
+        />
+        <Route
+          path="/automation"
+          element={
+            <PageTransition>
+              <ProtectedRoute allowedRoles={['ROLE_HOMEOWNER', 'ROLE_ADMIN']}>
+                <Automation />
               </ProtectedRoute>
             </PageTransition>
           }

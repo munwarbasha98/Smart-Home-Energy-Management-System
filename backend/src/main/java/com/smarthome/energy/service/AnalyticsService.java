@@ -726,7 +726,7 @@ public class AnalyticsService {
                 }
                 yield pts;
             }
-            default -> {
+            case "yearly" -> {
                 List<Object[]> rows = energyUsageLogRepository.aggregateGlobalMonthly(start, end);
                 Map<Integer, double[]> map = buildIntMap(rows);
                 String[] months = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -735,6 +735,21 @@ public class AnalyticsService {
                 for (int m = 1; m <= 12; m++) {
                     double[] v = map.getOrDefault(m, new double[] { 0.0, 0.0 });
                     pts.add(new EnergyTimePoint(months[m - 1], round4(v[0]), round2(v[1])));
+                }
+                yield pts;
+            }
+            default -> {
+                // monthly — daily breakdown for the current month
+                YearMonth ym = YearMonth.from(LocalDate.now());
+                LocalDateTime mStart = ym.atDay(1).atStartOfDay();
+                LocalDateTime mEnd = ym.plusMonths(1).atDay(1).atStartOfDay();
+                List<Object[]> rows = energyUsageLogRepository.aggregateGlobalDaily(mStart, mEnd);
+                Map<Integer, double[]> map = buildIntMap(rows);
+                DateTimeFormatter fmt = DateTimeFormatter.ofPattern("MMM dd");
+                List<EnergyTimePoint> pts = new ArrayList<>();
+                for (int d = 1; d <= ym.lengthOfMonth(); d++) {
+                    double[] v = map.getOrDefault(d, new double[] { 0.0, 0.0 });
+                    pts.add(new EnergyTimePoint(ym.atDay(d).format(fmt), round4(v[0]), round2(v[1])));
                 }
                 yield pts;
             }

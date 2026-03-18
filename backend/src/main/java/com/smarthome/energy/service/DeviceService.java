@@ -380,6 +380,48 @@ public class DeviceService {
     }
 
     /**
+     * Internal (scheduler-called) control — no SecurityContext required.
+     * Used by AutomationScheduler to execute scheduled ON/OFF commands.
+     */
+    @Transactional
+    public void controlDeviceInternal(Long deviceId, String action) {
+        Device device = deviceRepository.findByIdAndIsDeletedFalse(deviceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Device", "id", deviceId));
+
+        LocalDateTime now = LocalDateTime.now();
+        if (action.equalsIgnoreCase("on")) {
+            device.setStatus(DeviceStatus.ON);
+            device.setOnline(true);
+            device.setTurnedOnAt(now);
+            device.setLastActive(now);
+        } else {
+            device.setStatus(DeviceStatus.OFF);
+            device.setOnline(false);
+            device.setLastActive(now);
+
+            LocalDateTime turnedOnAt = device.getTurnedOnAt();
+            if (turnedOnAt != null && device.getPowerRating() != null && device.getPowerRating() > 0) {
+                long minutesOn = java.time.Duration.between(turnedOnAt, now).toMinutes();
+                if (minutesOn > 0) {
+                    double hoursOn = minutesOn / 60.0;
+                    double energyKwh = Math.round((device.getPowerRating() / 1000f) * hoursOn * 10000.0) / 10000.0;
+                    double cost = Math.round(energyKwh * energyRatePerKwh * 100.0) / 100.0;
+
+                    EnergyUsageLog log = new EnergyUsageLog();
+                    log.setDevice(device);
+                    log.setEnergyUsed((float) energyKwh);
+                    log.setTimestamp(now);
+                    log.setDurationMinutes((int) minutesOn);
+                    log.setCost(cost);
+                    energyUsageLogRepository.save(log);
+                }
+            }
+            device.setTurnedOnAt(null);
+        }
+        deviceRepository.save(device);
+    }
+
+    /**
      * Get device status map.
      */
     public Map<String, Object> getDeviceStatus(Long deviceId) {

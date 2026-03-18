@@ -183,4 +183,26 @@ export const technicianApi = {
     getAllMetrics: () => api.get('/technician/metrics'),
 };
 
+// Automation services (Milestone 5)
+export const automationApi = {
+    getSchedules: () => api.get('/schedules'),
+    createSchedule: (data) => api.post('/schedules', data),
+    updateSchedule: (scheduleId, data) => api.put(`/schedules/${scheduleId}`, data),
+    deleteSchedule: (scheduleId) => api.delete(`/schedules/${scheduleId}`),
+};
+
+// Alert services (Milestone 5)
+export const alertApi = {
+    getAlerts: () => api.get('/alerts'),
+    markAllRead: () => api.post('/alerts/mark-read'),
+    getThreshold: () => api.get('/alerts/threshold'),
+    setThreshold: (thresholdKwh, emailNotification = true) =>
+        api.post('/alerts/threshold', { thresholdKwh, emailNotification }),
+};
+
+// Insight services (Milestone 5)
+export const insightApi = {
+    getInsights: () => api.get('/insights'),
+};
+
 export default api;

@@ -130,4 +130,40 @@ public class EmailService {
             return false;
         }
     }
+
+    public boolean sendOverloadAlert(String toEmail, String firstName, double actualKwh, double thresholdKwh) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromEmail);
+            message.setTo(toEmail);
+            message.setSubject("⚠️ Energy Overload Alert - Smart Home Energy Management");
+            message.setText("Hello " + firstName + ",\n\n" +
+                    "⚠️ WARNING: Your energy consumption has exceeded your configured threshold!\n\n" +
+                    "Current 24-hour usage: " + String.format("%.2f", actualKwh) + " kWh\n" +
+                    "Your threshold: " + String.format("%.2f", thresholdKwh) + " kWh\n\n" +
+                    "Recommendation: Consider turning off high-power devices such as air conditioners, " +
+                    "heaters, or washing machines until consumption returns to normal levels.\n\n" +
+                    "You can manage your devices and update your threshold at: http://localhost:3000/dashboard\n\n" +
+                    "Best regards,\n" +
+                    "Smart Home Energy Management Team");
+
+            if (mailSender != null) {
+                try {
+                    mailSender.send(message);
+                    logger.info("Overload alert email sent to: {}", toEmail);
+                    return true;
+                } catch (Exception e) {
+                    logger.warn("Failed to send overload email to {}: {}", toEmail, e.getMessage());
+                    return false;
+                }
+            } else {
+                logger.info("[OVERLOAD ALERT - dev mode] To: {} | Actual: {} kWh | Threshold: {} kWh",
+                        toEmail, actualKwh, thresholdKwh);
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error("Unexpected error sending overload alert: {}", e.getMessage());
+            return false;
+        }
+    }
 }

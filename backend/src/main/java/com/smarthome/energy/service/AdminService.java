@@ -156,10 +156,10 @@ public class AdminService {
 
         Map<String, Long> roleDistribution = getRoleDistributionMap();
 
-        // Placeholder for device and installation counts
-        long totalDevices = 0;
-        long totalInstallations = 0;
-        double totalEnergyConsumption = 0.0;
+        // Real data aggregation for system statistics
+        long totalDevices = deviceRepository.countByIsDeletedFalse();
+        long totalInstallations = installationRepository.count();
+        double totalEnergyConsumption = energyUsageLogRepository.getGlobalTotalEnergyAllTime();
 
         return new SystemStatisticsResponse(
                 totalUsers,

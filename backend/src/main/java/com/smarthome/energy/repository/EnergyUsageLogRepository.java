@@ -171,4 +171,16 @@ public interface EnergyUsageLogRepository extends JpaRepository<EnergyUsageLog, 
                         "GROUP BY HOUR(e.timestamp) ORDER BY total DESC LIMIT 1", nativeQuery = true)
         List<Object[]> findGlobalPeakHour(@Param("startTime") LocalDateTime startTime,
                         @Param("endTime") LocalDateTime endTime);
+
+        @Query("SELECT COALESCE(SUM(e.energyUsed), 0.0) FROM EnergyUsageLog e")
+        Double getGlobalTotalEnergyAllTime();
+
+        // ═══════════ Per-device hourly breakdown (for InsightService) ═══════════
+
+        @Query(value = "SELECT HOUR(e.timestamp) AS hr, COALESCE(SUM(e.energy_used), 0.0) AS total " +
+                        "FROM energy_usage_logs e " +
+                        "WHERE e.device_id = :deviceId AND e.timestamp BETWEEN :startTime AND :endTime " +
+                        "GROUP BY HOUR(e.timestamp) ORDER BY HOUR(e.timestamp)", nativeQuery = true)
+        List<Object[]> getHourlyConsumptionRaw(@Param("deviceId") Long deviceId,
+                        @Param("startTime") LocalDateTime startTime, @Param("endTime") LocalDateTime endTime);
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { deviceApi } from '../services/api';
+import { deviceApi, alertApi, insightApi } from '../services/api';
 import AddDeviceModal from '../components/AddDeviceModal';
 import SummaryCard from '../components/SummaryCard';
 import { HourlyUsageChart, DailyUsageChart, LiveUsageBanner } from '../components/EnergyCharts';
@@ -10,7 +10,7 @@ import {
     Zap, DollarSign, TrendingUp, Activity, Wind, Lightbulb,
     Shield, Smartphone, Battery, Sun, Leaf, Clock, Flame,
     Droplets, Plus, Loader, AlertCircle, Thermometer, Plug,
-    Lock, Droplet, Edit2, Trash2, ToggleLeft, ToggleRight, Cpu
+    Lock, Droplet, Edit2, Trash2, ToggleLeft, ToggleRight, Cpu, Settings
 } from 'lucide-react';
 import {
     ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Tooltip
@@ -155,6 +155,75 @@ const Dashboard = () => {
         }
     };
 
+    // ── Alert & Threshold state (Milestone 5) ─────────────────────────────────
+    const [alerts, setAlerts] = useState([]);        // { id, message, type, read, createdAt }
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [threshold, setThreshold] = useState(null);  // { thresholdKwh, emailNotification, configured }
+    const [thresholdInput, setThresholdInput] = useState('');
+    const [savingThreshold, setSavingThreshold] = useState(false);
+    const [showAlertBanner, setShowAlertBanner] = useState(true);
+
+    // ── Insights state (Milestone 5) ──────────────────────────────────────────
+    const [insights, setInsights] = useState(null);  // { tips, peakHour, offPeakHour, breakdown }
+    const [loadingInsights, setLoadingInsights] = useState(false);
+
+    const fetchAlerts = useCallback(async () => {
+        try {
+            const res = await alertApi.getAlerts();
+            setAlerts(res.data?.alerts || []);
+            setUnreadCount(res.data?.unreadCount || 0);
+        } catch { /* silent */ }
+    }, []);
+
+    const fetchThreshold = useCallback(async () => {
+        try {
+            const res = await alertApi.getThreshold();
+            setThreshold(res.data);
+            setThresholdInput(res.data?.thresholdKwh ?? 10);
+        } catch { /* silent */ }
+    }, []);
+
+    const fetchInsights = useCallback(async () => {
+        try {
+            setLoadingInsights(true);
+            const res = await insightApi.getInsights();
+            setInsights(res.data);
+        } catch { /* silent */ } finally {
+            setLoadingInsights(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchAlerts();
+        fetchThreshold();
+        fetchInsights();
+        const id = setInterval(fetchAlerts, 60000); // re-poll every 60s
+        return () => clearInterval(id);
+    }, [fetchAlerts, fetchThreshold, fetchInsights]);
+
+    const handleMarkRead = async () => {
+        try {
+            await alertApi.markAllRead();
+            setUnreadCount(0);
+            setAlerts(prev => prev.map(a => ({ ...a, read: true })));
+            setShowAlertBanner(false);
+        } catch { /* silent */ }
+    };
+
+    const handleSaveThreshold = async () => {
+        const val = parseFloat(thresholdInput);
+        if (!val || val <= 0) return;
+        try {
+            setSavingThreshold(true);
+            const res = await alertApi.setThreshold(val, threshold?.emailNotification ?? true);
+            setThreshold(prev => ({ ...prev, thresholdKwh: res.data.thresholdKwh }));
+        } catch { /* silent */ } finally {
+            setSavingThreshold(false);
+        }
+    };
+
+    const overloadAlerts = alerts.filter(a => a.type === 'OVERLOAD' && !a.read);
+
     // Derived metrics
     const activeCount = devices.filter(d => d.isOnline === true).length;
     const totalPower = devices.reduce((sum, d) => sum + (d.powerRating || 0), 0);
@@ -195,6 +264,34 @@ const Dashboard = () => {
             }} />
 
             <div className="max-w-7xl mx-auto space-y-6 relative z-10">
+                {/* ── Overload Alert Banner (Milestone 5) ── */}
+                {canEdit && overloadAlerts.length > 0 && showAlertBanner && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                        className="relative rounded-2xl border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3"
+                        style={{
+                            background: 'linear-gradient(135deg, rgba(239,68,68,0.08), rgba(245,158,11,0.06))',
+                            borderColor: 'rgba(239,68,68,0.35)'
+                        }}>
+                        <div className="flex items-center gap-3 flex-1">
+                            <div className="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 text-xl"
+                                style={{ background: 'rgba(239,68,68,0.12)' }}>⚠️</div>
+                            <div>
+                                <h3 className="font-black text-sm" style={{ color: '#EF4444' }}>Energy Overload Detected!</h3>
+                                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                                    {overloadAlerts[0]?.message}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                            <button onClick={handleMarkRead}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold border"
+                                style={{ borderColor: 'rgba(239,68,68,0.3)', color: '#EF4444' }}>
+                                Dismiss
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+
                 {/* ── Header ── */}
                 <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6 }}
@@ -578,6 +675,63 @@ const Dashboard = () => {
                                 )}
                             </GlassCard>
                         </motion.div>
+
+                        {/* ── Energy Saving Tips (Milestone 5) ── */}
+                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+                            <GlassCard className="p-6">
+                                <h3 className="text-lg font-black mb-4 flex items-center gap-2" style={{ color: 'var(--text-color)' }}>
+                                    <Lightbulb style={{ color: '#F59E0B' }} size={20} />
+                                    Energy Saving Tips
+                                </h3>
+                                {loadingInsights ? (
+                                    <div className="flex items-center justify-center p-6"><Loader className="animate-spin" style={{ color: '#10B981' }} /></div>
+                                ) : insights?.tips?.length > 0 ? (
+                                    <ul className="space-y-3">
+                                        {insights.tips.map((tip, idx) => (
+                                            <li key={idx} className="flex gap-3 text-sm p-3 rounded-xl" style={{ background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.1)' }}>
+                                                <span className="flex-shrink-0" style={{ color: '#10B981' }}>💡</span>
+                                                <span style={{ color: 'var(--text-color)' }}>{tip}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p className="text-sm text-center p-4 italic" style={{ color: 'var(--text-secondary)' }}>
+                                        Not enough data to generate insights yet. Check back later!
+                                    </p>
+                                )}
+                            </GlassCard>
+                        </motion.div>
+
+                        {/* ── Overload Threshold Settings (Milestone 5) ── */}
+                        {canEdit && (
+                            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}>
+                                <GlassCard className="p-6">
+                                    <h3 className="text-lg font-black mb-4 flex items-center gap-2" style={{ color: 'var(--text-color)' }}>
+                                        <Settings style={{ color: '#A78BFA' }} size={20} />
+                                        Overload Threshold
+                                    </h3>
+                                    <div className="flex flex-col gap-3">
+                                        <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                                            Max Daily Consumption (kWh)
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <input type="number" step="0.1" value={thresholdInput === '' ? '' : thresholdInput} onChange={e => setThresholdInput(e.target.value)}
+                                                className="w-full px-3 py-2 rounded-xl text-sm font-semibold"
+                                                style={{ background: 'var(--glass-surface)', border: '1px solid var(--glass-border)', color: 'var(--text-color)', outline: 'none' }}
+                                            />
+                                            <button onClick={handleSaveThreshold} disabled={savingThreshold}
+                                                className="px-4 py-2 rounded-xl text-sm font-bold text-white transition-all whitespace-nowrap flex items-center justify-center min-w-[80px]"
+                                                style={{ background: 'linear-gradient(135deg, #10B981, #22C55E)' }}>
+                                                {savingThreshold ? <Loader size={16} className="animate-spin" /> : 'Save'}
+                                            </button>
+                                        </div>
+                                        <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                                            Currently set to: <span className="font-bold">{threshold?.thresholdKwh || 'None'} </span>
+                                        </p>
+                                    </div>
+                                </GlassCard>
+                            </motion.div>
+                        )}
 
                         {/* Weekly Savings badge */}
                         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>

@@ -30,18 +30,79 @@ const HEALTH_CONFIG = {
 };
 
 // ─── Demo / fallback data ─────────────────────────────────────────────────────
-const DEMO_TIMELINE = [
-  { time: 'Mon', energy: 4.2, cost: 29.4 }, { time: 'Tue', energy: 3.8, cost: 26.6 },
-  { time: 'Wed', energy: 5.1, cost: 35.7 }, { time: 'Thu', energy: 4.6, cost: 32.2 },
-  { time: 'Fri', energy: 6.3, cost: 44.1 }, { time: 'Sat', energy: 7.1, cost: 49.7 },
-  { time: 'Sun', energy: 5.5, cost: 38.5 },
+const HOUR_LABELS = [
+  '12 AM', '1 AM', '2 AM', '3 AM', '4 AM', '5 AM',
+  '6 AM', '7 AM', '8 AM', '9 AM', '10 AM', '11 AM',
+  '12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM',
+  '6 PM', '7 PM', '8 PM', '9 PM', '10 PM', '11 PM',
 ];
 
-const DEMO_HOURLY = Array.from({ length: 24 }, (_, h) => {
-  const base = h >= 6 && h <= 22 ? 0.8 : 0.2;
-  const peak = (h >= 9 && h <= 11) || (h >= 18 && h <= 21) ? 1.5 : 1;
-  return { hour: h, energy: +(base * peak * (0.7 + Math.random() * 0.6)).toFixed(3) };
-});
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const getExpectedPointCount = (period) => {
+  if (period === 'daily') return 24;
+  if (period === 'weekly') return 7;
+  if (period === 'yearly') return 12;
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+};
+
+const assertPointCount = (period, points, source = 'timeline') => {
+  const expected = getExpectedPointCount(period);
+  const actual = Array.isArray(points) ? points.length : 0;
+  console.assert(
+    actual === expected,
+    `[Analytics] ${source} for ${period} expected ${expected} points but got ${actual}`,
+  );
+  return actual === expected;
+};
+
+const buildDemoDailyTimeline = () => {
+  const baseCurve = [0.35, 0.3, 0.28, 0.26, 0.24, 0.3, 0.55, 0.82, 1.05, 1.12, 0.95, 0.88,
+    0.9, 0.92, 0.94, 0.98, 1.1, 1.24, 1.42, 1.38, 1.2, 0.95, 0.65, 0.45];
+  return HOUR_LABELS.map((label, idx) => {
+    const energy = +(baseCurve[idx] * 2.8).toFixed(4);
+    return { time: label, energy, cost: +(energy * 7).toFixed(2) };
+  });
+};
+
+const buildDemoWeeklyTimeline = () => {
+  const week = [4.2, 3.9, 5.1, 4.7, 6.0, 6.8, 5.4];
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return days.map((day, idx) => ({ time: day, energy: week[idx], cost: +(week[idx] * 7).toFixed(2) }));
+};
+
+const buildDemoMonthlyTimeline = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  return Array.from({ length: daysInMonth }, (_, i) => {
+    const day = i + 1;
+    const label = new Date(year, month, day).toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+    const trend = 4.1 + Math.sin(day / 3.2) * 1.1 + (day % 6) * 0.12;
+    const energy = +trend.toFixed(4);
+    return { time: label, energy, cost: +(energy * 7).toFixed(2) };
+  });
+};
+
+const buildDemoYearlyTimeline = () => {
+  const yearPattern = [102, 97, 108, 111, 116, 124, 131, 128, 119, 113, 107, 101];
+  return MONTH_LABELS.map((month, idx) => {
+    const energy = +yearPattern[idx].toFixed(4);
+    return { time: month, energy, cost: +(energy * 7).toFixed(2) };
+  });
+};
+
+const getDemoTimelineForPeriod = (period) => {
+  if (period === 'daily') return buildDemoDailyTimeline();
+  if (period === 'weekly') return buildDemoWeeklyTimeline();
+  if (period === 'yearly') return buildDemoYearlyTimeline();
+  return buildDemoMonthlyTimeline();
+};
+
+const DEMO_HOURLY = buildDemoDailyTimeline().map((point, hour) => ({ hour, energy: point.energy }));
+const DEMO_TIMELINE = buildDemoWeeklyTimeline();
 
 const DEMO_WEEKLY_CURRENT = [
   { time: 'Mon', energy: 4.2 }, { time: 'Tue', energy: 3.8 }, { time: 'Wed', energy: 5.1 },
@@ -83,6 +144,45 @@ const getPeakColor = (h) => {
   if (isMidPeak(h)) return '#F59E0B';
   return '#10B981';
 };
+
+const PERIOD_LABELS = {
+  daily: 'Daily',
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+  yearly: 'Yearly',
+};
+
+const getPeriodLabel = (period) => PERIOD_LABELS[period] || 'Monthly';
+
+const getPointEnergy = (point) => {
+  if (!point || typeof point !== 'object') return 0;
+  if (typeof point.energy === 'number') return point.energy;
+  if (typeof point.energyKwh === 'number') return point.energyKwh;
+  if (typeof point.totalEnergyKwh === 'number') return point.totalEnergyKwh;
+  return 0;
+};
+
+const getIsoWeekNumber = (date) => {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+};
+
+const xAxisTitle = (value) => ({
+  value,
+  position: 'insideBottom',
+  offset: -4,
+  style: { fill: 'var(--text-secondary)', fontSize: 11 },
+});
+
+const yAxisTitle = (value) => ({
+  value,
+  angle: -90,
+  position: 'insideLeft',
+  style: { fill: 'var(--text-secondary)', fontSize: 11, textAnchor: 'middle' },
+});
 
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
@@ -217,8 +317,14 @@ const Analytics = () => {
       const res = await analyticsApi.getWeeklyUsage(year);
       const weeks = res.data || [];
       if (weeks.length >= 2) {
-        setWeeklyCurrentData(weeks[weeks.length - 1]?.days || weeks.slice(-7));
-        setWeeklyPrevData(weeks[weeks.length - 2]?.days || weeks.slice(-14, -7));
+        // Compare last completed week against the week before it.
+        // This avoids comparing an in-progress week with a completed one.
+        const currentIsoWeek = getIsoWeekNumber(new Date());
+        const completedWeekIndex = Math.min(Math.max(currentIsoWeek - 2, 0), weeks.length - 1);
+        const previousCompletedWeekIndex = Math.max(completedWeekIndex - 1, 0);
+
+        setWeeklyCurrentData(completedWeekIndex >= 0 ? [weeks[completedWeekIndex]] : []);
+        setWeeklyPrevData(previousCompletedWeekIndex >= 0 ? [weeks[previousCompletedWeekIndex]] : []);
       } else {
         setWeeklyCurrentData([]); setWeeklyPrevData([]);
       }
@@ -238,63 +344,115 @@ const Analytics = () => {
   useEffect(() => {
     if (!user) return;
     setLoading(true); setError('');
-    const promises = [fetchSummary(selectedPeriod), fetchHourly(), fetchWeeklyComparison()];
+    const promises = [fetchSummary(selectedPeriod)];
+    if (selectedPeriod === 'daily') promises.push(fetchHourly());
+    if (selectedPeriod === 'weekly') promises.push(fetchWeeklyComparison());
     if (isAdmin) promises.push(fetchAdminData(selectedPeriod));
     if (isAdmin || isTechnician) promises.push(fetchHealthData());
     Promise.all(promises).finally(() => setLoading(false));
   }, [user, selectedPeriod]);
 
   // ── Computed values (with demo fallback) ────────────────────────────────────
-  // Use demo data when API returns empty/zero data, not just when API fails
-  const hasMeaningfulSummary = summary && (
-    (summary.totalEnergyKwh > 0) ||
-    (summary.timeline && summary.timeline.length > 0 && summary.timeline.some(t => t.energy > 0)) ||
-    (summary.topDevices && summary.topDevices.length > 0)
-  );
-  const hasMeaningfulHourly = hourlyData.length > 0 && hourlyData.some(d => d.energy > 0);
-  const hasMeaningfulWeekly = weeklyCurrentData.length > 0 && weeklyCurrentData.some(d => d.energy > 0);
+  const periodLabel = getPeriodLabel(selectedPeriod);
+  const expectedPoints = getExpectedPointCount(selectedPeriod);
+  const apiTimeline = summary?.timeline || [];
+  const apiPointCountValid = summary ? assertPointCount(selectedPeriod, apiTimeline, 'API timeline') : false;
 
-  const effectiveSummary = hasMeaningfulSummary ? summary : DEMO_SUMMARY;
-  const effectiveHourly = hasMeaningfulHourly ? hourlyData : DEMO_HOURLY;
-  const effectiveWeeklyCurrent = hasMeaningfulWeekly ? weeklyCurrentData : DEMO_WEEKLY_CURRENT;
-  const effectiveWeeklyPrev = (weeklyPrevData.length > 0 && weeklyPrevData.some(d => d.energy > 0)) ? weeklyPrevData : DEMO_WEEKLY_PREV;
-  const usingDemo = !hasMeaningfulSummary;
+  const selectedDemoTimeline = useMemo(() => {
+    const demo = getDemoTimelineForPeriod(selectedPeriod);
+    assertPointCount(selectedPeriod, demo, 'Demo timeline');
+    return demo;
+  }, [selectedPeriod]);
 
-  const totalEnergy = effectiveSummary.totalEnergyKwh || 0;
+  const hasRealPeriodData = Boolean(summary) && apiTimeline.length > 0 && apiPointCountValid;
+  const usingDemo = !hasRealPeriodData;
+  const showNoDataForPeriod = usingDemo && !loading && !error;
+
+  const demoEnergyTotal = selectedDemoTimeline.reduce((sum, p) => sum + (p.energy || 0), 0);
+  const effectiveSummary = hasRealPeriodData
+    ? summary
+    : {
+      ...DEMO_SUMMARY,
+      period: selectedPeriod,
+      timeline: selectedDemoTimeline,
+      totalEnergyKwh: +demoEnergyTotal.toFixed(4),
+    };
+
+  const hasValidHourlyData = hourlyData.length > 0 && assertPointCount('daily', hourlyData, 'Hourly API');
+  const effectiveHourly = hasValidHourlyData ? hourlyData : DEMO_HOURLY;
+
+  const hasValidWeeklyCurrent = weeklyCurrentData.length > 0;
+  const hasValidWeeklyPrev = weeklyPrevData.length > 0;
+  const effectiveWeeklyCurrent = hasValidWeeklyCurrent ? weeklyCurrentData : DEMO_WEEKLY_CURRENT;
+  const effectiveWeeklyPrev = hasValidWeeklyPrev ? weeklyPrevData : DEMO_WEEKLY_PREV;
+
+  const resolvedTimeline = effectiveSummary.timeline || [];
+  const timeline = assertPointCount(selectedPeriod, resolvedTimeline, 'Render timeline') ? resolvedTimeline : selectedDemoTimeline;
+
+  const totalEnergy = effectiveSummary.totalEnergyKwh || timeline.reduce((sum, point) => sum + (point.energy || 0), 0);
   const totalCost = totalEnergy * ratePerUnit;
-  const timeline = (effectiveSummary.timeline && effectiveSummary.timeline.length > 0 && effectiveSummary.timeline.some(t => t.energy > 0))
-    ? effectiveSummary.timeline : DEMO_TIMELINE;
-  const avgDailyCost = timeline.length > 0 ? totalCost / timeline.length : 0;
+  const avgDailyCost = timeline.length > 0 ? totalCost / expectedPoints : 0;
+  const periodAnalysisSubtitle = `${periodLabel} energy consumption analysis`;
+  const avgCostLabel = `Average ${periodLabel} Cost`;
+  const avgCostUnit = selectedPeriod === 'daily'
+    ? 'per day'
+    : selectedPeriod === 'weekly'
+      ? 'per week'
+      : selectedPeriod === 'monthly'
+        ? 'per month'
+        : 'per year';
 
   // Weekly comparison
-  const currentWeekTotal = effectiveWeeklyCurrent.reduce((s, d) => s + (d.energy || 0), 0);
-  const prevWeekTotal = effectiveWeeklyPrev.reduce((s, d) => s + (d.energy || 0), 0);
+  const currentWeekTotal = effectiveWeeklyCurrent.reduce((s, d) => s + getPointEnergy(d), 0);
+  const prevWeekTotal = effectiveWeeklyPrev.reduce((s, d) => s + getPointEnergy(d), 0);
   const weeklyDiff = currentWeekTotal - prevWeekTotal;
-  const weeklyPctChange = prevWeekTotal > 0 ? ((weeklyDiff / prevWeekTotal) * 100) : 0;
+  const weeklyPctChange = prevWeekTotal > 0 ? ((weeklyDiff / prevWeekTotal) * 100) : (currentWeekTotal > 0 ? 100 : 0);
   const weeklyIncreased = weeklyDiff > 0;
+  const weeklyDecreased = weeklyDiff < 0;
 
   // Weekly comparison chart data
   const weeklyComparisonData = useMemo(() => {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return days.map((day, i) => ({
-      day,
-      current: effectiveWeeklyCurrent[i]?.energy || 0,
-      previous: effectiveWeeklyPrev[i]?.energy || 0,
+    const maxPoints = Math.max(effectiveWeeklyCurrent.length, effectiveWeeklyPrev.length, 1);
+    return Array.from({ length: maxPoints }, (_, i) => ({
+      day: effectiveWeeklyCurrent[i]?.time || effectiveWeeklyPrev[i]?.time || `Point ${i + 1}`,
+      current: getPointEnergy(effectiveWeeklyCurrent[i]),
+      previous: getPointEnergy(effectiveWeeklyPrev[i]),
     }));
   }, [effectiveWeeklyCurrent, effectiveWeeklyPrev]);
 
-  // Peak analysis
+  // Peak analysis — period-aware
   const peakAnalysis = useMemo(() => {
-    if (!effectiveHourly.length) return { peakHour: 'N/A', offPeakHour: 'N/A', peakEnergy: 0, offPeakEnergy: 0 };
-    let maxH = 0, minH = 0, maxE = -1, minE = Infinity;
-    effectiveHourly.forEach(d => {
-      if (d.energy > maxE) { maxE = d.energy; maxH = d.hour; }
-      if (d.energy < minE) { minE = d.energy; minH = d.hour; }
-    });
-    const peakTotal = effectiveHourly.filter(d => isPeakHour(d.hour)).reduce((s, d) => s + d.energy, 0);
-    const offPeakTotal = effectiveHourly.filter(d => !isPeakHour(d.hour) && !isMidPeak(d.hour)).reduce((s, d) => s + d.energy, 0);
-    return { peakHour: formatHour(maxH), offPeakHour: formatHour(minH), peakEnergy: peakTotal, offPeakEnergy: offPeakTotal, peakMax: maxE, offPeakMin: minE };
-  }, [effectiveHourly]);
+    if (selectedPeriod === 'daily') {
+      // Hourly peak analysis for daily view
+      if (!effectiveHourly.length) return { peakHour: 'N/A', offPeakHour: 'N/A', peakEnergy: 0, offPeakEnergy: 0, isHourly: true };
+      let maxH = 0, minH = 0, maxE = -1, minE = Infinity;
+      effectiveHourly.forEach(d => {
+        if (d.energy > maxE) { maxE = d.energy; maxH = d.hour; }
+        if (d.energy < minE) { minE = d.energy; minH = d.hour; }
+      });
+      const peakTotal = effectiveHourly.filter(d => isPeakHour(d.hour)).reduce((s, d) => s + d.energy, 0);
+      const offPeakTotal = effectiveHourly.filter(d => !isPeakHour(d.hour) && !isMidPeak(d.hour)).reduce((s, d) => s + d.energy, 0);
+      return { peakHour: formatHour(maxH), offPeakHour: formatHour(minH), peakEnergy: peakTotal, offPeakEnergy: offPeakTotal, peakMax: maxE, offPeakMin: minE, isHourly: true };
+    } else {
+      // Timeline-based peak analysis for weekly/monthly/yearly
+      if (!timeline.length) return { peakHour: 'N/A', offPeakHour: 'N/A', peakEnergy: 0, offPeakEnergy: 0, isHourly: false, avg: 0 };
+      let maxIdx = 0, minIdx = 0, maxE = -1, minE = Infinity;
+      timeline.forEach((d, i) => {
+        const e = d.energy || 0;
+        if (e > maxE) { maxE = e; maxIdx = i; }
+        if (e < minE) { minE = e; minIdx = i; }
+      });
+      const avg = timeline.reduce((s, d) => s + (d.energy || 0), 0) / timeline.length;
+      const peakTotal = timeline.filter(d => (d.energy || 0) > avg).reduce((s, d) => s + (d.energy || 0), 0);
+      const offPeakTotal = timeline.filter(d => (d.energy || 0) <= avg).reduce((s, d) => s + (d.energy || 0), 0);
+      return {
+        peakHour: timeline[maxIdx]?.time || 'N/A',
+        offPeakHour: timeline[minIdx]?.time || 'N/A',
+        peakEnergy: peakTotal, offPeakEnergy: offPeakTotal,
+        peakMax: maxE, offPeakMin: minE, isHourly: false, avg
+      };
+    }
+  }, [selectedPeriod, effectiveHourly, timeline]);
 
   const periods = ['daily', 'weekly', 'monthly', 'yearly'];
   const tabs = [
@@ -377,17 +535,34 @@ const Analytics = () => {
             {activeTab === 'overview' && (
               <motion.div key="overview" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-6">
 
+                {showNoDataForPeriod && (
+                  <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                    className="p-4 rounded-2xl border-2 flex items-center gap-3"
+                    style={{ borderColor: 'rgba(245,158,11,0.5)', background: 'rgba(245,158,11,0.08)' }}>
+                    <AlertTriangle size={18} color="#F59E0B" />
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-color)' }}>
+                      No data for selected period ({periodLabel}). Showing demo dataset with {expectedPoints} points.
+                    </p>
+                  </motion.div>
+                )}
+
                 {/* ── 1. Summary Cards ──────────────────────────────── */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <SummaryCard icon={Zap} label="Total Energy" color="#10B981"
                     value={totalEnergy.toFixed(2)} unit="kWh consumed" delay={0.05} />
                   <SummaryCard icon={DollarSign} label="Estimated Cost" color="#F59E0B"
                     value={`₹${totalCost.toFixed(2)}`} unit={`@ ₹${ratePerUnit}/kWh`} delay={0.1} />
-                  <SummaryCard icon={Clock} label="Peak Hour" color="#8B5CF6"
+                  <SummaryCard icon={Clock} label={selectedPeriod === 'daily' ? 'Peak Hour' : selectedPeriod === 'yearly' ? 'Peak Month' : 'Peak Day'} color="#8B5CF6"
                     value={peakAnalysis.peakHour} unit="highest usage" delay={0.15} />
-                  <SummaryCard icon={Activity} label="Weekly Change" color={weeklyIncreased ? '#EF4444' : '#10B981'}
-                    value={`${weeklyIncreased ? '+' : ''}${weeklyPctChange.toFixed(1)}%`}
-                    unit={weeklyIncreased ? 'more than last week' : 'less than last week'} delay={0.2} />
+                  {selectedPeriod === 'weekly' ? (
+                    <SummaryCard icon={Activity} label="Weekly Change" color={weeklyIncreased ? '#EF4444' : '#10B981'}
+                      value={`${weeklyIncreased ? '+' : ''}${weeklyPctChange.toFixed(1)}%`}
+                      unit={weeklyIncreased ? 'more than last week' : 'less than last week'} delay={0.2} />
+                  ) : (
+                    <SummaryCard icon={Activity} label="Avg Consumption" color="#3B82F6"
+                      value={(totalEnergy / (timeline.length || 1)).toFixed(2)}
+                      unit="kWh per point" delay={0.2} />
+                  )}
                 </div>
 
                 {/* ── 2. Consumption Pattern Charts ─────────────────── */}
@@ -404,8 +579,8 @@ const Analytics = () => {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                        <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} interval="preserveStartEnd" />
-                        <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                        <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} interval="preserveStartEnd" label={xAxisTitle('Time')} />
+                        <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} label={yAxisTitle('Energy (kWh)')} />
                         <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ fontSize: 12 }} />
                         <Line type="monotone" dataKey="energy" name="Energy (kWh)" stroke="#10B981" strokeWidth={2.5} dot={false} activeDot={{ r: 6, fill: '#10B981' }} />
@@ -416,7 +591,7 @@ const Analytics = () => {
 
                   {/* Bar Chart — Daily Usage */}
                   <GlassCard>
-                    <SectionHeader icon={BarChart2} title="Daily Consumption" subtitle="Energy usage distribution" color="#3B82F6" />
+                    <SectionHeader icon={BarChart2} title={selectedPeriod === 'daily' ? 'Hourly Consumption' : selectedPeriod === 'yearly' ? 'Monthly Consumption' : 'Daily Consumption'} subtitle={`${selectedPeriod} energy distribution`} color="#3B82F6" />
                     <ResponsiveContainer width="100%" height={280}>
                       <BarChart data={timeline} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
                         <defs>
@@ -426,8 +601,8 @@ const Analytics = () => {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                        <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
-                        <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                        <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} label={xAxisTitle('Time')} />
+                        <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} label={yAxisTitle('Energy (kWh)')} />
                         <Tooltip content={<CustomTooltip />} />
                         <Bar dataKey="energy" name="Energy (kWh)" fill="url(#barGrad)" radius={[6, 6, 0, 0]} />
                       </BarChart>
@@ -436,42 +611,46 @@ const Analytics = () => {
                 </div>
 
                 {/* ── 3. Weekly Comparison ──────────────────────────── */}
-                <GlassCard>
-                  <SectionHeader icon={Calendar} title="Weekly Comparison" subtitle="Current week vs previous week" color="#8B5CF6" />
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    {/* Current Week */}
-                    <div className="rounded-xl p-4 border" style={{ background: 'rgba(16,185,129,0.06)', borderColor: 'rgba(16,185,129,0.2)' }}>
-                      <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>This Week</p>
-                      <p className="text-2xl font-bold" style={{ color: '#10B981' }}>{currentWeekTotal.toFixed(2)} <span className="text-sm font-medium">kWh</span></p>
-                    </div>
-                    {/* Previous Week */}
-                    <div className="rounded-xl p-4 border" style={{ background: 'rgba(59,130,246,0.06)', borderColor: 'rgba(59,130,246,0.2)' }}>
-                      <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Last Week</p>
-                      <p className="text-2xl font-bold" style={{ color: '#3B82F6' }}>{prevWeekTotal.toFixed(2)} <span className="text-sm font-medium">kWh</span></p>
-                    </div>
-                    {/* Change */}
-                    <div className={`rounded-xl p-4 border ${weeklyIncreased ? 'comparison-badge-up' : 'comparison-badge-down'}`}>
-                      <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Change</p>
-                      <div className="flex items-center gap-2">
-                        {weeklyIncreased ? <ArrowUpRight size={22} color="#EF4444" /> : <ArrowDownRight size={22} color="#10B981" />}
-                        <p className="text-2xl font-bold">{Math.abs(weeklyPctChange).toFixed(1)}%</p>
+                {selectedPeriod === 'weekly' && (
+                  <GlassCard>
+                    <SectionHeader icon={Calendar} title="Weekly Comparison" subtitle="Current week vs previous week" color="#8B5CF6" />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      {/* Current Week */}
+                      <div className="rounded-xl p-4 border" style={{ background: 'rgba(16,185,129,0.06)', borderColor: 'rgba(16,185,129,0.2)' }}>
+                        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>This Week</p>
+                        <p className="text-2xl font-bold" style={{ color: '#10B981' }}>{currentWeekTotal.toFixed(2)} <span className="text-sm font-medium">kWh</span></p>
                       </div>
-                      <p className="text-xs mt-1 font-semibold">{weeklyIncreased ? '↑ Consumption increased' : '↓ Consumption decreased'}</p>
+                      {/* Previous Week */}
+                      <div className="rounded-xl p-4 border" style={{ background: 'rgba(59,130,246,0.06)', borderColor: 'rgba(59,130,246,0.2)' }}>
+                        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Last Week</p>
+                        <p className="text-2xl font-bold" style={{ color: '#3B82F6' }}>{prevWeekTotal.toFixed(2)} <span className="text-sm font-medium">kWh</span></p>
+                      </div>
+                      {/* Change */}
+                      <div className={`rounded-xl p-4 border ${weeklyIncreased ? 'comparison-badge-up' : (weeklyDecreased ? 'comparison-badge-down' : '')}`} style={!weeklyIncreased && !weeklyDecreased ? { background: 'rgba(107,114,128,0.06)', borderColor: 'rgba(107,114,128,0.2)' } : {}}>
+                        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Change</p>
+                        <div className="flex items-center gap-2">
+                          {weeklyIncreased ? <ArrowUpRight size={22} color="#EF4444" /> : (weeklyDecreased ? <ArrowDownRight size={22} color="#10B981" /> : <span style={{fontSize: '22px', color: '#6B7280'}}>-</span>)}
+                          <p className="text-2xl font-bold" style={!weeklyIncreased && !weeklyDecreased ? { color: '#6B7280' } : {}}>{Math.abs(weeklyPctChange).toFixed(1)}%</p>
+                        </div>
+                        <p className="text-xs mt-1 font-semibold" style={!weeklyIncreased && !weeklyDecreased ? { color: '#6B7280' } : {}}>
+                          {weeklyIncreased ? '↑ Consumption increased' : (weeklyDecreased ? '↓ Consumption decreased' : 'No change')}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  {/* Comparison Bar Chart */}
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={weeklyComparisonData} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
-                      <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="current" name="This Week (kWh)" fill="#10B981" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="previous" name="Last Week (kWh)" fill="#3B82F680" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </GlassCard>
+                    {/* Comparison Bar Chart */}
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={weeklyComparisonData} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                        <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} label={xAxisTitle('Day')} />
+                        <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} label={yAxisTitle('Energy (kWh)')} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                        <Bar dataKey="current" name="This Week (kWh)" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={60} />
+                        <Bar dataKey="previous" name="Last Week (kWh)" fill="#3B82F680" radius={[4, 4, 0, 0]} maxBarSize={60} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </GlassCard>
+                )}
 
                 {/* ── 4. Energy Cost Prediction ─────────────────────── */}
                 <GlassCard>
@@ -504,24 +683,24 @@ const Analytics = () => {
                     <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}
                       className="rounded-xl p-5 text-center border" style={{ background: 'rgba(139,92,246,0.06)', borderColor: 'rgba(139,92,246,0.2)' }}>
                       <TrendingUp size={24} className="mx-auto mb-2" style={{ color: '#8B5CF6' }} />
-                      <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Average Daily Cost</p>
+                      <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>{avgCostLabel}</p>
                       <p className="text-3xl font-bold" style={{ color: '#8B5CF6' }}>₹{avgDailyCost.toFixed(2)}</p>
-                      <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>per day</p>
+                      <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{avgCostUnit}</p>
                     </motion.div>
                   </div>
                 </GlassCard>
 
                 {/* ── 5. Peak vs Off-Peak Usage ─────────────────────── */}
                 <GlassCard>
-                  <SectionHeader icon={Sun} title="Peak vs Off-Peak Usage" subtitle="24-hour energy consumption analysis" color="#EF4444" />
+                  <SectionHeader icon={Sun} title="Peak vs Off-Peak Usage" subtitle={periodAnalysisSubtitle} color="#EF4444" />
                   {/* Summary strip */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                     <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(239,68,68,0.08)' }}>
-                      <p className="text-[10px] font-bold uppercase" style={{ color: '#EF4444' }}>Peak Hour</p>
+                      <p className="text-[10px] font-bold uppercase" style={{ color: '#EF4444' }}>{selectedPeriod === 'daily' ? 'Peak Hour' : selectedPeriod === 'yearly' ? 'Peak Month' : 'Peak Day'}</p>
                       <p className="text-lg font-bold" style={{ color: 'var(--text-color)' }}>{peakAnalysis.peakHour}</p>
                     </div>
                     <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(16,185,129,0.08)' }}>
-                      <p className="text-[10px] font-bold uppercase" style={{ color: '#10B981' }}>Off-Peak Hour</p>
+                      <p className="text-[10px] font-bold uppercase" style={{ color: '#10B981' }}>{selectedPeriod === 'daily' ? 'Off-Peak Hour' : selectedPeriod === 'yearly' ? 'Off-Peak Month' : 'Off-Peak Day'}</p>
                       <p className="text-lg font-bold" style={{ color: 'var(--text-color)' }}>{peakAnalysis.offPeakHour}</p>
                     </div>
                     <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(239,68,68,0.08)' }}>
@@ -533,28 +712,56 @@ const Analytics = () => {
                       <p className="text-lg font-bold" style={{ color: '#10B981' }}>{peakAnalysis.offPeakEnergy.toFixed(2)} kWh</p>
                     </div>
                   </div>
-                  {/* Hourly Bar Chart with peak coloring */}
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={effectiveHourly} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-                      <XAxis dataKey="hour" tickFormatter={formatHour} tick={{ fontSize: 9, fill: 'var(--text-secondary)' }} interval={1} />
-                      <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
-                      <Tooltip content={<HourlyTooltip />} />
-                      <Bar dataKey="energy" name="Energy (kWh)" radius={[4, 4, 0, 0]}>
-                        {effectiveHourly.map((entry, i) => (
-                          <Cell key={i} fill={getPeakColor(entry.hour)} />
+                  {/* Peak chart — hourly for daily, timeline-based for other periods */}
+                  {peakAnalysis.isHourly ? (
+                    <>
+                      <ResponsiveContainer width="100%" height={280}>
+                        <BarChart data={effectiveHourly} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+                          <XAxis dataKey="hour" tickFormatter={formatHour} tick={{ fontSize: 9, fill: 'var(--text-secondary)' }} interval={1} label={xAxisTitle('Time')} />
+                          <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} label={yAxisTitle('Energy (kWh)')} />
+                          <Tooltip content={<HourlyTooltip />} />
+                          <Bar dataKey="energy" name="Energy (kWh)" radius={[4, 4, 0, 0]}>
+                            {effectiveHourly.map((entry, i) => (
+                              <Cell key={i} fill={getPeakColor(entry.hour)} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                      <div className="flex justify-center gap-6 mt-4">
+                        {[{ label: 'Peak (6-9 AM, 6-9 PM)', color: '#EF4444' }, { label: 'Mid-Peak (10 AM-5 PM)', color: '#F59E0B' }, { label: 'Off-Peak (10 PM-5 AM)', color: '#10B981' }].map(l => (
+                          <div key={l.label} className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                            <div className="w-3 h-3 rounded-sm" style={{ background: l.color }} /> {l.label}
+                          </div>
                         ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                  {/* Legend */}
-                  <div className="flex justify-center gap-6 mt-4">
-                    {[{ label: 'Peak (6-9 AM, 6-9 PM)', color: '#EF4444' }, { label: 'Mid-Peak (10 AM-5 PM)', color: '#F59E0B' }, { label: 'Off-Peak (10 PM-5 AM)', color: '#10B981' }].map(l => (
-                      <div key={l.label} className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                        <div className="w-3 h-3 rounded-sm" style={{ background: l.color }} /> {l.label}
                       </div>
-                    ))}
-                  </div>
+                    </>
+                  ) : (
+                    <>
+                      <ResponsiveContainer width="100%" height={280}>
+                        <BarChart data={timeline} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+                          <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'var(--text-secondary)' }} interval={selectedPeriod === 'monthly' ? 2 : 0} label={xAxisTitle('Time')} />
+                          <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} label={yAxisTitle('Energy (kWh)')} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Bar dataKey="energy" name="Energy (kWh)" radius={[4, 4, 0, 0]}>
+                            {timeline.map((entry, i) => {
+                              const e = entry.energy || 0;
+                              const color = e > peakAnalysis.avg * 1.2 ? '#EF4444' : e > peakAnalysis.avg * 0.8 ? '#F59E0B' : '#10B981';
+                              return <Cell key={i} fill={color} />;
+                            })}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                      <div className="flex justify-center gap-6 mt-4">
+                        {[{ label: 'Above Average (High Usage)', color: '#EF4444' }, { label: 'Near Average', color: '#F59E0B' }, { label: 'Below Average (Low Usage)', color: '#10B981' }].map(l => (
+                          <div key={l.label} className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                            <div className="w-3 h-3 rounded-sm" style={{ background: l.color }} /> {l.label}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </GlassCard>
 
                 {/* ── Top Devices — Bar + Pie ──────────────────────── */}
@@ -567,8 +774,8 @@ const Analytics = () => {
                           name: d.deviceName?.length > 10 ? d.deviceName.slice(0, 9) + '…' : d.deviceName, energy: d.energyKwh,
                         }))} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
-                          <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} label={xAxisTitle('Device')} />
+                          <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} label={yAxisTitle('Energy (kWh)')} />
                           <Tooltip content={<CustomTooltip />} />
                           <Bar dataKey="energy" name="Energy (kWh)" radius={[6, 6, 0, 0]}>
                             {effectiveSummary.topDevices.slice(0, 6).map((_, i) => (
@@ -662,8 +869,8 @@ const Analytics = () => {
                         <ResponsiveContainer width="100%" height={260}>
                           <BarChart data={adminData.timeline} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                            <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} interval="preserveStartEnd" />
-                            <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                            <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} interval="preserveStartEnd" label={xAxisTitle('Time')} />
+                            <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} label={yAxisTitle('Energy (kWh)')} />
                             <Tooltip content={<CustomTooltip />} />
                             <Bar dataKey="energy" name="Energy (kWh)" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                           </BarChart>

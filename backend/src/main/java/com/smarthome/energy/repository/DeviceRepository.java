@@ -71,4 +71,7 @@ public interface DeviceRepository extends JpaRepository<Device, Long> {
         /** Sum of powerRating for all online devices (Admin total) */
         @Query("SELECT COALESCE(SUM(d.powerRating), 0.0) FROM Device d WHERE d.status = 'ON' AND d.isDeleted = false")
         Double sumAllOnlinePowerRatings();
+
+        /** Count all non-deleted devices */
+        long countByIsDeletedFalse();
 }
