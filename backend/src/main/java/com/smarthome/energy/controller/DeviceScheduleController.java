@@ -2,6 +2,8 @@ package com.smarthome.energy.controller;
 
 import com.smarthome.energy.dto.DeviceScheduleRequest;
 import com.smarthome.energy.service.DeviceScheduleService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,8 @@ import java.util.Map;
 @RequestMapping("/api/schedules")
 public class DeviceScheduleController {
 
+    private static final Logger logger = LoggerFactory.getLogger(DeviceScheduleController.class);
+
     @Autowired
     private DeviceScheduleService scheduleService;
 
@@ -24,6 +28,8 @@ public class DeviceScheduleController {
     @PostMapping
     @PreAuthorize("hasRole('HOMEOWNER') or hasRole('ADMIN')")
     public ResponseEntity<?> createSchedule(@RequestBody DeviceScheduleRequest request) {
+        logger.info("📥 Schedule request received — deviceId={}, action={}, scheduledAt={}",
+                request.getDeviceId(), request.getAction(), request.getScheduledAt());
         return ResponseEntity.status(HttpStatus.CREATED).body(scheduleService.createSchedule(request));
     }
 

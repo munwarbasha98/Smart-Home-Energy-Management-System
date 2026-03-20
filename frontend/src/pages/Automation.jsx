@@ -87,7 +87,7 @@ const ScheduleModal = ({ isOpen, onClose, onSave, devices, editSchedule, isLoadi
         onSave({
             deviceId: Number(form.deviceId),
             action: form.action,
-            scheduledAt: new Date(form.scheduledAt).toISOString().replace('Z', ''),
+            scheduledAt: form.scheduledAt,
             label: form.label || undefined
         });
     };

@@ -10,7 +10,7 @@ import {
     Zap, DollarSign, TrendingUp, Activity, Wind, Lightbulb,
     Shield, Smartphone, Battery, Sun, Leaf, Clock, Flame,
     Droplets, Plus, Loader, AlertCircle, Thermometer, Plug,
-    Lock, Droplet, Edit2, Trash2, ToggleLeft, ToggleRight, Cpu, Settings
+    Lock, Droplet, Edit2, Trash2, ToggleLeft, ToggleRight, Cpu, Settings, Download
 } from 'lucide-react';
 import {
     ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Tooltip
@@ -82,6 +82,7 @@ const Dashboard = () => {
     const [deviceError, setDeviceError] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isAddingDevice, setIsAddingDevice] = useState(false);
+    const [exportingCSV, setExportingCSV] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
     const [togglingId, setTogglingId] = useState(null);
 
@@ -224,6 +225,51 @@ const Dashboard = () => {
 
     const overloadAlerts = alerts.filter(a => a.type === 'OVERLOAD' && !a.read);
 
+    // CSV Export handler
+    const exportCSV = async () => {
+        if (devices.length === 0) return;
+        setExportingCSV(true);
+        try {
+            const allLogs = [];
+            
+            // Concurrently fetch all energy logs for all devices
+            await Promise.all(
+                devices.map(async (d) => {
+                    const res = await deviceApi.getDeviceEnergyLogs(d.id);
+                    if (res.data && Array.isArray(res.data)) {
+                        allLogs.push(...res.data);
+                    }
+                })
+            );
+
+            // Sort chronically
+            allLogs.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+            const headers = ['LogID', 'DeviceName', 'EnergyUsed(kWh)', 'Cost($)', 'Timestamp'];
+            const rows = allLogs.map(log => [
+                log.id || '',
+                log.deviceName || '',
+                log.energyUsed !== undefined && log.energyUsed !== null ? Number(log.energyUsed).toExponential(2) : 0,
+                log.cost !== undefined && log.cost !== null ? Number(log.cost).toExponential(2) : 0,
+                log.timestamp || ''
+            ]);
+
+            const csvContent = [headers, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `energy-usage-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error("Failed to export logs:", err);
+            alert("Error exporting CSV: " + (err.response?.data?.message || err.message));
+        } finally {
+            setExportingCSV(false);
+        }
+    };
+
     // Derived metrics
     const activeCount = devices.filter(d => d.isOnline === true).length;
     const totalPower = devices.reduce((sum, d) => sum + (d.powerRating || 0), 0);
@@ -318,6 +364,17 @@ const Dashboard = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
+                        {/* Export CSV button */}
+                        {devices.length > 0 && (
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                                onClick={exportCSV}
+                                disabled={exportingCSV}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm border shadow-sm ${exportingCSV ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                style={{ borderColor: 'rgba(16,185,129,0.3)', color: '#10B981', background: 'rgba(16,185,129,0.08)' }}>
+                                {exportingCSV ? <Loader className="animate-spin" size={16} /> : <Download size={16} />} 
+                                {exportingCSV ? 'Exporting...' : 'Export CSV'}
+                            </motion.button>
+                        )}
                         {/* Add Device button — homeowner/admin only */}
                         {canEdit && (
                             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}

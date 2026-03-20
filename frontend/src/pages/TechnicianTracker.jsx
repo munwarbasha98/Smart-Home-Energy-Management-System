@@ -1,8 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wrench, TrendingUp, CheckCircle, Clock, Star, MapPin, FileText, Loader, Calendar } from 'lucide-react';
+import { Wrench, TrendingUp, CheckCircle, Clock, Star, MapPin, FileText, Loader, Calendar, AlertTriangle, XCircle, WifiOff, Zap, Activity, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { technicianApi } from '../services/api';
+import { technicianApi, analyticsApi } from '../services/api';
+
+const HEALTH_CONFIG = {
+    NORMAL:   { color: '#10B981', Icon: CheckCircle, bg: 'rgba(16,185,129,0.1)',  label: 'Normal' },
+    WARNING:  { color: '#F59E0B', Icon: AlertTriangle, bg: 'rgba(245,158,11,0.1)', label: 'Warning' },
+    CRITICAL: { color: '#EF4444', Icon: XCircle, bg: 'rgba(239,68,68,0.1)',       label: 'Critical' },
+    OFFLINE:  { color: '#6B7280', Icon: WifiOff, bg: 'rgba(107,114,128,0.1)',     label: 'Offline' },
+};
 
 const TechnicianTracker = () => {
     const { user } = useAuth();
@@ -17,9 +24,27 @@ const TechnicianTracker = () => {
     const [filter, setFilter] = useState('all');
     const [selectedStatus, setSelectedStatus] = useState('pending');
 
+    // Device health state
+    const [healthData, setHealthData] = useState([]);
+    const [healthLoading, setHealthLoading] = useState(true);
+
+    const fetchHealthData = useCallback(async () => {
+        try {
+            setHealthLoading(true);
+            const res = await analyticsApi.getTechnicianDeviceHealth();
+            setHealthData(Array.isArray(res.data) ? res.data : []);
+        } catch (err) {
+            console.error('Error loading device health:', err);
+            setHealthData([]);
+        } finally {
+            setHealthLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         fetchInstallations();
         fetchMetrics();
+        fetchHealthData();
     }, []);
 
     const fetchInstallations = async () => {
@@ -183,6 +208,122 @@ const TechnicianTracker = () => {
                                 <p className="text-3xl font-bold" style={{ color: 'var(--text-color)' }}>⭐ {metrics.rating?.toFixed(1)}</p>
                             </motion.div>
                         </div>
+                    )}
+                </div>
+
+                {/* Critical Device Health Alerts */}
+                <div className="mb-10">
+                    <h2 className="text-2xl font-bold mb-6 flex items-center gap-2" style={{ color: 'var(--text-color)' }}>
+                        <Shield className="text-red-500" size={24} /> Critical Device Health Alerts
+                    </h2>
+
+                    {healthLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                                <Loader className="text-green-600" size={32} />
+                            </motion.div>
+                        </div>
+                    ) : healthData.length === 0 ? (
+                        <div className="text-center py-12 rounded-2xl border" style={{ background: 'var(--card-bg)', borderColor: 'var(--border-color)' }}>
+                            <Shield size={48} className="mx-auto mb-3 opacity-20" style={{ color: 'var(--text-secondary)' }} />
+                            <p style={{ color: 'var(--text-secondary)' }}>No device health data available</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Health summary counts */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                                {Object.entries(HEALTH_CONFIG).map(([status, conf]) => {
+                                    const count = healthData.filter(d => d.healthStatus === status).length;
+                                    return (
+                                        <motion.div key={status} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                                            className="rounded-2xl p-4 text-center border shadow-sm"
+                                            style={{ background: conf.bg, borderColor: conf.color + '33' }}>
+                                            <conf.Icon size={22} style={{ color: conf.color }} className="mx-auto mb-2" />
+                                            <p className="text-3xl font-bold" style={{ color: conf.color }}>{count}</p>
+                                            <p className="text-xs font-semibold uppercase tracking-wider mt-1" style={{ color: conf.color }}>{status}</p>
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Individual device health cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {healthData.map((device, i) => {
+                                    const conf = HEALTH_CONFIG[device.healthStatus] || HEALTH_CONFIG.NORMAL;
+                                    const statusOnline = device.status === 'ONLINE' || device.isOnline;
+                                    const statusColor = statusOnline ? '#10B981' : '#9CA3AF';
+                                    const anomaly = device.anomalyScore || 0;
+                                    const avgKwh = device.avgEnergyKwh || 0;
+                                    const recentKwh = device.recentEnergyKwh || 0;
+
+                                    return (
+                                        <motion.div key={device.deviceId || i}
+                                            initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: i * 0.04 }}
+                                            className="rounded-2xl p-5 border-2 shadow-sm relative overflow-hidden"
+                                            style={{ background: 'var(--card-bg)', borderColor: conf.color + '55', borderLeftWidth: 5, borderLeftColor: conf.color }}>
+
+                                            {/* Glow blob */}
+                                            <div className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-10 filter blur-3xl pointer-events-none" style={{ background: conf.color, transform: 'translate(30%, -30%)' }} />
+
+                                            {/* Header */}
+                                            <div className="flex items-start justify-between gap-2 relative z-10 mb-3">
+                                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: conf.bg }}>
+                                                        <conf.Icon size={18} style={{ color: conf.color }} />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="font-bold text-sm truncate" style={{ color: 'var(--text-color)' }}>
+                                                            {device.deviceName} <span className="text-xs font-normal" style={{ color: 'var(--text-secondary)' }}>(ID: {device.deviceId})</span>
+                                                        </p>
+                                                        <p className="text-xs capitalize flex items-center gap-1 mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                                                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
+                                                            {device.deviceType} • {device.ownerName || 'Unknown'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0" style={{ background: conf.bg, color: conf.color }}>
+                                                    {device.healthStatus}
+                                                </span>
+                                            </div>
+
+                                            {/* Stats */}
+                                            <div className="grid grid-cols-2 gap-3 relative z-10 mb-3">
+                                                <div className="rounded-xl p-3 border border-dashed" style={{ background: 'var(--glass-surface)', borderColor: 'var(--border-color)' }}>
+                                                    <p className="text-[10px] font-medium flex items-center gap-1 mb-1" style={{ color: 'var(--text-secondary)' }}>
+                                                        <Zap size={10} /> Avg Usage
+                                                    </p>
+                                                    <p className="font-bold text-sm" style={{ color: 'var(--text-color)' }}>
+                                                        {avgKwh > 0 ? avgKwh.toFixed(2) : '—'} <span className="text-[10px] font-normal" style={{ color: 'var(--text-secondary)' }}>kW</span>
+                                                    </p>
+                                                </div>
+                                                <div className="rounded-xl p-3 border" style={{ background: conf.bg, borderColor: conf.color + '33' }}>
+                                                    <p className="text-[10px] font-medium flex items-center gap-1 mb-1" style={{ color: conf.color }}>
+                                                        <TrendingUp size={10} /> Latest Anomaly
+                                                    </p>
+                                                    <p className="font-bold text-sm" style={{ color: conf.color }}>
+                                                        {anomaly > 0 ? `${anomaly.toFixed(2)}×` : '—'} <span className="text-[10px] font-normal opacity-70">kW</span>
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Progress bar */}
+                                            <div className="relative z-10">
+                                                <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--border-color)' }}>
+                                                    <motion.div
+                                                        className="h-full rounded-full"
+                                                        style={{ background: conf.color }}
+                                                        initial={{ width: 0 }}
+                                                        animate={{ width: `${Math.min(anomaly * 20, 100)}%` }}
+                                                        transition={{ duration: 0.8, delay: i * 0.05 }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+                        </>
                     )}
                 </div>
 
