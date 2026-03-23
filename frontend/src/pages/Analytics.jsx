@@ -9,7 +9,7 @@ import {
   Zap, TrendingUp, TrendingDown, DollarSign, Clock, Activity,
   AlertTriangle, CheckCircle, XCircle, WifiOff, Sun, Moon,
   BarChart2, PieChart as PieIcon, Globe, Shield, Cpu, Loader,
-  ArrowUpRight, ArrowDownRight, Settings, Calendar
+  ArrowUpRight, ArrowDownRight, Settings, Calendar, PowerOff
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { analyticsApi } from '../services/api';
