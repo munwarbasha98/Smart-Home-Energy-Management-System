@@ -47,3 +47,11 @@ frontend/.vite/
 # ── Logs ─────────────────────────────────────────────
 *.log
 logs/
+
+# Explicitly ignore tracked backend generated logs (archives already created)
+backend/backend_log.txt
+backend/backend_logs.txt
+backend/build_errors.txt
+backend/build_out.txt
+backend/compile_stderr.txt
+backend/compile_stdout.txt
